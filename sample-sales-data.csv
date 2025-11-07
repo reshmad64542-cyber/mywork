@@ -1,0 +1,41 @@
+date,product,category,quantity,price,festival
+2024-01-15,Basmati Rice,Groceries,25,299,
+2024-01-20,Cotton Kurta,Clothing,12,899,
+2024-02-10,Pressure Cooker,Kitchen,8,1899,
+2024-02-14,Rose Petals,Beauty,45,199,Valentine
+2024-03-08,Holi Colors,Beauty,120,99,Holi
+2024-03-10,Sweets Box,Groceries,200,599,Holi
+2024-03-12,Water Guns,Sports,85,299,Holi
+2024-04-15,Cricket Bat,Sports,15,2499,
+2024-05-01,Summer Clothes,Clothing,67,799,
+2024-06-20,Masala Chai,Beverages,89,199,
+2024-07-15,Monsoon Jacket,Clothing,34,1299,
+2024-08-15,Rakhi Set,Gifts,156,399,Raksha Bandhan
+2024-08-16,Sweets Assorted,Groceries,234,799,Raksha Bandhan
+2024-09-10,Ganesh Idol,Religious,78,599,Ganesh Chaturthi
+2024-09-12,Modak Mix,Groceries,145,299,Ganesh Chaturthi
+2024-10-15,Diya Set,Decorations,189,199,Diwali
+2024-10-20,Rangoli Colors,Decorations,267,149,Diwali
+2024-10-22,Gold Jewelry,Jewelry,45,15999,Diwali
+2024-10-24,Sweets Premium,Groceries,345,1299,Diwali
+2024-10-25,Crackers,Fireworks,123,899,Diwali
+2024-11-15,Winter Wear,Clothing,89,1599,
+2024-12-20,Christmas Cake,Bakery,67,799,Christmas
+2024-12-24,Gift Hampers,Gifts,134,1999,Christmas
+2024-12-25,Wine Bottles,Beverages,56,2499,Christmas
+2023-01-26,Tricolor Flag,Patriotic,89,99,Republic Day
+2023-03-21,Organic Holi Colors,Beauty,156,299,Holi
+2023-04-14,New Year Sweets,Groceries,234,899,Tamil New Year
+2023-08-15,Independence Flags,Patriotic,178,149,Independence Day
+2023-10-02,Khadi Clothes,Clothing,67,1299,Gandhi Jayanti
+2023-10-24,Diwali Lights,Decorations,456,599,Diwali
+2023-11-07,Diwali Sweets,Groceries,567,1599,Diwali
+2023-12-25,Christmas Decorations,Decorations,234,799,Christmas
+2022-03-18,Holi Sweets,Groceries,345,699,Holi
+2022-08-19,Rakhi Premium,Gifts,234,799,Raksha Bandhan
+2022-10-24,Diwali Hampers,Gifts,456,2999,Diwali
+2022-12-25,Christmas Gifts,Gifts,345,1999,Christmas
+2021-03-28,Holi Celebration Kit,Entertainment,123,1299,Holi
+2021-10-15,Diwali Special Box,Groceries,678,2499,Diwali
+2021-12-25,Christmas Special,Gifts,234,3999,Christmas
+2020-10-14,Diwali Essentials,Mixed,789,1999,Diwali
