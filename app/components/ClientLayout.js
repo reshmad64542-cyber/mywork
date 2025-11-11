@@ -17,13 +17,25 @@ export default function ClientLayout({ children }) {
     return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
   }
 
+  if (shouldShowLayout) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        {isAuthenticated ? <AuthenticatedHeader /> : <Header />}
+        <main className="flex-1">
+          {children}
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
   return (
     <>
       {shouldShowLayout && (isAuthenticated ? <AuthenticatedHeader /> : <Header />)}
-      <main className={shouldShowLayout ? "min-h-screen" : ""}>
+      <main className={shouldShowLayout ? "flex-1" : ""}>
         {children}
       </main>
-      {shouldShowLayout && !isAuthenticated && <Footer />}
+      {shouldShowLayout && <Footer />}
     </>
   );
 }

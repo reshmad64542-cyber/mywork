@@ -29,12 +29,12 @@ export default function Home() {
   ];
 
   return (
-    <div className="bg-gradient-to-b from-white to-gray-50 min-h-screen overflow-x-hidden">
+    <div className="bg-gradient-to-b from-white to-gray-50 overflow-x-hidden">
       <div className="pt-4 sm:pt-6">
         <Carousel images={carouselImages} />
       </div>
 
-      <div className="container mx-auto px-4 sm:px-6 max-w-7xl text-center">
+      <div className="container mx-auto px-4 sm:px-6 max-w-7xl text-center pb-8">
       </div>
    </div>
   );
