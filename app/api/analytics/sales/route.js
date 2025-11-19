@@ -1,19 +1,24 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
+import { getSalesAnalytics } from "../../../lib/analytics";
+
+const CACHE_HEADERS = {
+  "Cache-Control": "s-maxage=120, stale-while-revalidate=600",
+};
 
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
-    const dateRange = searchParams.get('dateRange') || '30d';
-    const category = searchParams.get('category') || 'all';
-    const location = searchParams.get('location') || 'all';
+    const filters = {
+      dateRange: searchParams.get("dateRange") || "30d",
+      category: searchParams.get("category") || "all",
+    };
 
-    // Forward the request to the backend
-    const response = await fetch(`http://localhost:5001/api/analytics/sales?dateRange=${dateRange}&category=${category}&location=${location}`);
-    const data = await response.json();
-
-    return NextResponse.json(data);
+    const data = await getSalesAnalytics(filters);
+    return NextResponse.json(data, { headers: CACHE_HEADERS });
   } catch (error) {
-    console.error('Sales analytics error:', error);
-    return NextResponse.json({ error: 'Failed to fetch sales analytics' }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch sales analytics" },
+      { status: 500 }
+    );
   }
 }

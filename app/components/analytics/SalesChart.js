@@ -1,4 +1,5 @@
 "use client";
+import React, { useMemo } from "react";
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -21,10 +22,19 @@ ChartJS.register(
   Legend
 );
 
-export default function SalesChart({ data, title }) {
+function SalesChart({ data, title }) {
   if (!data) return <div className="bg-white p-6 rounded-lg shadow">Loading sales data...</div>;
+  if (data.length === 0) {
+    return (
+      <div className="bg-white p-6 rounded-lg shadow">
+        <h3 className="text-lg font-semibold mb-2">{title || "Sales Trends"}</h3>
+        <p className="text-sm text-gray-500">No sales recorded for the selected range.</p>
+      </div>
+    );
+  }
 
-  const chartData = {
+  const chartData = useMemo(
+    () => ({
     labels: data.map(item => new Date(item.date).toLocaleDateString()),
     datasets: [
       {
@@ -36,15 +46,18 @@ export default function SalesChart({ data, title }) {
       },
       {
         label: 'Orders',
-        data: data.map(item => item.orders * 100), // Scale for visibility
+          data: data.map(item => item.orders * 100),
         borderColor: 'rgb(16, 185, 129)',
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
         tension: 0.4,
       }
     ],
-  };
+    }),
+    [data]
+  );
 
-  const options = {
+  const options = useMemo(
+    () => ({
     responsive: true,
     plugins: {
       legend: {
@@ -52,7 +65,7 @@ export default function SalesChart({ data, title }) {
       },
       title: {
         display: true,
-        text: title || 'Sales Trends (Last 30 Days)',
+          text: title || 'Sales Trends',
       },
     },
     scales: {
@@ -60,7 +73,9 @@ export default function SalesChart({ data, title }) {
         beginAtZero: true,
       },
     },
-  };
+    }),
+    [title]
+  );
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
@@ -68,3 +83,5 @@ export default function SalesChart({ data, title }) {
     </div>
   );
 }
+
+export default React.memo(SalesChart);

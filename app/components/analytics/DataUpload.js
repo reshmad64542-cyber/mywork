@@ -1,86 +1,71 @@
 "use client";
-import { useState } from "react";
 
-export default function DataUpload({ onDataUploaded }) {
+import React, { useState } from "react";
+
+export default function DataUpload() {
+  const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState("");
-  const [error, setError] = useState(null);
-  
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
+  const [preview, setPreview] = useState([]);
 
-  const handleFileUpload = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
+  const handleFileChange = (e) => setFile(e.target.files[0]);
+
+  const handleUpload = async () => {
+    if (!file) return alert("Please select a file first.");
 
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append("file", file);
 
-    setUploading(true);
-    setUploadStatus("Uploading and processing data...");
-    
     try {
-      setError(null);
-
-      // Use Next.js proxy so uploads are forwarded server-side to backend (avoids CORS)
-      const response = await fetch('/api/upload-data', {
-        method: 'POST',
+      setUploading(true);
+      const res = await fetch("/api/upload-data", {
+        method: "POST",
         body: formData,
       });
 
-      const result = await response.json().catch(() => ({}));
+      const data = await res.json();
+      console.log("Upload response:", data);
 
-      if (response.ok) {
-        setUploadStatus(`✅ Successfully processed ${result.recordsProcessed || 0} records`);
-        if (onDataUploaded) onDataUploaded(result);
+      if (res.ok) {
+        alert(`✅ ${data.message} (${data.total} records)`);
+        setPreview(data.sample || []);
       } else {
-        throw new Error(result.error || `Server returned ${response.status}`);
+        alert(`❌ Upload failed: ${data.error}`);
       }
-    } catch (error) {
-      setUploadStatus(`❌ Upload failed: ${error.message}`);
-      setError(error.message);
+    } catch (err) {
+      console.error("Upload error:", err);
+      alert("Upload failed");
     } finally {
       setUploading(false);
     }
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow mb-6">
-      <h3 className="text-lg font-semibold mb-4">📊 Upload Sales Data</h3>
-      
-      <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-        <input
-          type="file"
-          accept=".csv,.xlsx,.xls"
-          onChange={handleFileUpload}
-          disabled={uploading}
-          className="hidden"
-          id="file-upload"
-        />
-        <label
-          htmlFor="file-upload"
-          className={`cursor-pointer inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white ${
-            uploading ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'
-          }`}
-        >
-          {uploading ? 'Processing...' : '📁 Choose CSV/Excel File'}
-        </label>
-        
-        <p className="mt-2 text-sm text-gray-600">
-          Upload sales data with columns: date, product, category, quantity, price, festival
-        </p>
-        
-        {uploadStatus && (
-          <div className="mt-4 p-3 rounded-md bg-gray-50">
-            <p className="text-sm">{uploadStatus}</p>
-          </div>
-        )}
-      </div>
+    <div className="p-4 border rounded-md shadow-sm bg-white">
+      <h2 className="text-xl font-semibold mb-4">📁 Upload Sales Data</h2>
+      <input
+        type="file"
+        accept=".csv, .xlsx"
+        onChange={handleFileChange}
+        className="mb-3"
+      />
+      <button
+        onClick={handleUpload}
+        disabled={uploading}
+        className={`px-4 py-2 rounded text-white ${
+          uploading ? "bg-gray-500" : "bg-blue-600 hover:bg-blue-700"
+        }`}
+      >
+        {uploading ? "Uploading..." : "Upload File"}
+      </button>
 
-      <div className="mt-4 text-xs text-gray-500">
-        <p><strong>Expected format:</strong></p>
-        <p>• date (YYYY-MM-DD), product, category, quantity, price, festival</p>
-        <p>• Festival examples: Diwali, Holi, Christmas, Eid, etc.</p>
-      </div>
+      {preview.length > 0 && (
+        <div className="mt-4">
+          <h3 className="font-medium mb-2">Sample Data:</h3>
+          <pre className="bg-gray-100 p-2 rounded text-sm overflow-auto">
+            {JSON.stringify(preview, null, 2)}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }

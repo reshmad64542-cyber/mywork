@@ -1,157 +1,344 @@
 "use client";
-import { useState, useEffect } from "react";
-import { useLanguage } from "../context/LanguageContext";
-import { useTranslation } from "../lib/translations";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import dynamic from "next/dynamic";
 import ProtectedRoute from "../components/ProtectedRoute";
-import SalesChart from "../components/analytics/SalesChart";
-import CustomerBehavior from "../components/analytics/CustomerBehavior";
-import ProductHeatmap from "../components/analytics/ProductHeatmap";
-import ConversionFunnel from "../components/analytics/ConversionFunnel";
-import FilterPanel from "../components/analytics/FilterPanel";
 import DataUpload from "../components/analytics/DataUpload";
-import FestivalTrends from "../components/analytics/FestivalTrends";
-import PredictionPanel from "../components/analytics/PredictionPanel";
-import CustomerSegments from "../components/analytics/CustomerSegments";
+import FilterPanel from "../components/analytics/FilterPanel";
+
+const SalesChart = dynamic(() => import("../components/analytics/SalesChart"), {
+  ssr: false,
+  loading: () => (
+    <div className="bg-white rounded-lg shadow p-6 text-sm text-gray-500">
+      Loading sales analytics…
+    </div>
+  ),
+});
+
+const ProductHeatmap = dynamic(
+  () => import("../components/analytics/ProductHeatmap"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="bg-white rounded-lg shadow p-6 text-sm text-gray-500">
+        Preparing product performance…
+      </div>
+    ),
+  }
+);
+
+const ConversionFunnel = dynamic(
+  () => import("../components/analytics/ConversionFunnel"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="bg-white rounded-lg shadow p-6 text-sm text-gray-500">
+        Building funnel insights…
+      </div>
+    ),
+  }
+);
+
+const CustomerBehavior = dynamic(
+  () => import("../components/analytics/CustomerBehavior"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="bg-white rounded-lg shadow p-6 text-sm text-gray-500">
+        Summarising customer engagement…
+      </div>
+    ),
+  }
+);
+
+const CustomerSegments = dynamic(
+  () => import("../components/analytics/CustomerSegments"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="bg-white rounded-lg shadow p-6 text-sm text-gray-500">
+        Analysing customer cohorts…
+      </div>
+    ),
+  }
+);
+
+const FestivalTrends = dynamic(
+  () => import("../components/analytics/FestivalTrends"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="bg-white rounded-lg shadow p-6 text-sm text-gray-500">
+        Crunching festival moments…
+      </div>
+    ),
+  }
+);
+
+const PredictionPanel = dynamic(
+  () => import("../components/analytics/PredictionPanel"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="bg-white rounded-lg shadow p-6 text-sm text-gray-500">
+        Generating future insights…
+      </div>
+    ),
+  }
+);
+
+const MarketingAnalytics = dynamic(
+  () => import("../components/analytics/MarketingAnalytics"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="bg-white rounded-lg shadow p-6 text-sm text-gray-500">
+        Loading marketing ROI…
+      </div>
+    ),
+  }
+);
+
+const DEFAULT_FILTERS = {
+  dateRange: "30d",
+  category: "all",
+};
+
+const TAB_ORDER = [
+  { id: "upload", label: "Upload" },
+  { id: "sales", label: "Sales" },
+  { id: "products", label: "Products" },
+  { id: "customers", label: "Customers" },
+  { id: "segments", label: "Segments" },
+  { id: "marketing", label: "Marketing" },
+  { id: "predictions", label: "Predictions" },
+];
 
 export default function Analytics() {
-  const [filters, setFilters] = useState({
-    dateRange: '30d',
-    category: 'all',
-    location: 'all'
-  });
-  const [analyticsData, setAnalyticsData] = useState(null);
-  const [uploadedData, setUploadedData] = useState(null);
-  const [customerData, setCustomerData] = useState(null);
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [analytics, setAnalytics] = useState(null);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { language } = useLanguage();
-  const { t } = useTranslation(language);
+  const [error, setError] = useState(null);
+  const [uploadSummary, setUploadSummary] = useState(null);
+  const [activeTab, setActiveTab] = useState("upload");
 
-  useEffect(() => {
-    fetchAnalyticsData();
-    fetchCustomerAnalytics();
-  }, [filters]);
-
-  const fetchAnalyticsData = async () => {
+  const loadAnalytics = useCallback(async (nextFilters) => {
     setLoading(true);
+    setError(null);
     try {
-      const response = await fetch(`/api/analytics?${new URLSearchParams(filters)}`);
-      const data = await response.json();
-      setAnalyticsData(data);
-    } catch (error) {
-      console.error('Analytics fetch error:', error);
+      const params = new URLSearchParams({
+        dateRange: nextFilters.dateRange,
+        category: nextFilters.category,
+      });
+      const response = await fetch(`/api/analytics?${params.toString()}`, {
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch analytics data");
+      }
+
+      const payload = await response.json();
+      setAnalytics(payload);
+      setCategories(payload.filters?.categoryOptions ?? []);
+    } catch (err) {
+      setError(err.message || "Unable to load analytics data.");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchCustomerAnalytics = async () => {
-    try {
-      const response = await fetch('http://localhost:5001/api/customer-analytics');
-      const data = await response.json();
-      setCustomerData(data);
-    } catch (error) {
-      console.error('Customer analytics fetch error:', error);
-    }
-  };
+  useEffect(() => {
+    loadAnalytics(filters);
+  }, [filters, loadAnalytics]);
 
-  const handleDataUploaded = (data) => {
-    setUploadedData(data);
-    // Update analytics data with uploaded data
-    setAnalyticsData({
-      sales: convertToSalesData(data.trends),
-      behavior: generateBehaviorFromUploaded(data.trends),
-      products: convertToProductData(data.trends.productTrends),
-      funnel: generateFunnelFromUploaded(data.trends)
-    });
-  };
+  const handleFiltersChange = useCallback((nextFilters) => {
+    setFilters(nextFilters);
+  }, []);
 
-  const convertToSalesData = (trends) => {
-    if (!trends.productTrends) return [];
-    return Object.entries(trends.productTrends).slice(0, 12).map(([product, data], index) => ({
-      date: new Date(2024, index, 1).toISOString().split('T')[0],
-      revenue: data.totalRevenue,
-      orders: Math.floor(data.totalQuantity / 10),
-      customers: Math.floor(data.totalQuantity / 15)
-    }));
-  };
+  const handleTabChange = useCallback((tabId) => {
+    setActiveTab(tabId);
+  }, []);
 
-  const generateBehaviorFromUploaded = (trends) => {
-    const totalProducts = Object.keys(trends.productTrends || {}).length;
-    return {
-      sessionDuration: Math.min(300 + totalProducts * 10, 600),
-      pageViews: Math.min(3 + Math.floor(totalProducts / 5), 12),
-      bounceRate: Math.max(20, 50 - totalProducts),
-      returnRate: Math.min(30 + totalProducts * 2, 70)
-    };
-  };
+  const handleUploadComplete = useCallback(
+    async (payload) => {
+      setUploadSummary({
+        message: payload.message,
+        total: payload.total,
+        durationMs: payload.durationMs,
+      });
+      await loadAnalytics(filters);
+    },
+    [filters, loadAnalytics]
+  );
 
-  const convertToProductData = (productTrends) => {
-    if (!productTrends) return [];
-    return Object.entries(productTrends).map(([name, data]) => ({
-      name,
-      views: data.totalQuantity * 15,
-      sales: data.totalQuantity,
-      category: data.category
-    }));
-  };
+  const salesSummary = useMemo(
+    () => analytics?.sales?.summary ?? null,
+    [analytics]
+  );
 
-  const generateFunnelFromUploaded = (trends) => {
-    const totalQuantity = Object.values(trends.productTrends || {}).reduce((sum, p) => sum + p.totalQuantity, 0);
-    const visitors = totalQuantity * 20;
-    return [
-      { stage: 'Visitors', count: visitors, percentage: 100 },
-      { stage: 'Product Views', count: Math.floor(visitors * 0.65), percentage: 65 },
-      { stage: 'Add to Cart', count: Math.floor(visitors * 0.28), percentage: 28 },
-      { stage: 'Checkout', count: Math.floor(visitors * 0.12), percentage: 12 },
-      { stage: 'Purchase', count: totalQuantity, percentage: (totalQuantity / visitors * 100).toFixed(1) }
-    ];
-  };
-
-  if (loading) {
+  const salesTabContent = useMemo(() => {
+    if (!analytics) return null;
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-xl">{t('loading')}</div>
+      <div className="space-y-6">
+        {salesSummary && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <SummaryCard title="Total Revenue" value={`₹${salesSummary.totalRevenue.toLocaleString()}`} />
+            <SummaryCard title="Total Orders" value={salesSummary.totalOrders.toLocaleString()} />
+            <SummaryCard title="Avg Order Value" value={`₹${salesSummary.averageOrderValue.toLocaleString()}`} />
+            <SummaryCard title="Transactions" value={salesSummary.totalTransactions.toLocaleString()} />
+          </div>
+        )}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <SalesChart data={analytics.sales?.daily} />
+          <ConversionFunnel data={analytics.sales?.funnel} />
+        </div>
+        <FestivalTrends data={analytics.sales?.festivals} />
       </div>
     );
-  }
+  }, [analytics, salesSummary]);
+
+  const productsTabContent = useMemo(() => {
+    if (!analytics) return null;
+    return <ProductHeatmap data={analytics.products?.heatmap} />;
+  }, [analytics]);
+
+  const customersTabContent = useMemo(() => {
+    if (!analytics) return null;
+    return <CustomerBehavior data={analytics.customerBehavior} />;
+  }, [analytics]);
+
+  const segmentsTabContent = useMemo(() => {
+    if (!analytics) return null;
+    return <CustomerSegments data={analytics.customerSegments} />;
+  }, [analytics]);
+
+  const marketingTabContent = useMemo(() => {
+    if (!analytics) return null;
+    return <MarketingAnalytics data={analytics.marketing} />;
+  }, [analytics]);
+
+  const predictionsTabContent = useMemo(() => {
+    if (!analytics) return null;
+    return <PredictionPanel data={analytics.predictions} />;
+  }, [analytics]);
+
+  const renderTabContent = useMemo(() => {
+    if (loading) {
+      return (
+        <div className="h-64 flex items-center justify-center bg-white rounded-lg shadow">
+          <span className="text-gray-600 text-sm">
+            Crunching analytics for {filters.dateRange}…
+          </span>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
+        </div>
+      );
+    }
+
+    if (!analytics) {
+      return null;
+    }
+
+    switch (activeTab) {
+      case "upload":
+        return (
+          <div className="space-y-6">
+            <DataUpload onUploadComplete={handleUploadComplete} />
+            {uploadSummary && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                {uploadSummary.message} — {uploadSummary.total} rows processed in{" "}
+                {(uploadSummary.durationMs / 1000).toFixed(2)} seconds.
+              </div>
+            )}
+          </div>
+        );
+      case "sales":
+        return salesTabContent;
+      case "products":
+        return productsTabContent;
+      case "customers":
+        return customersTabContent;
+      case "segments":
+        return segmentsTabContent;
+      case "marketing":
+        return marketingTabContent;
+      case "predictions":
+        return predictionsTabContent;
+      default:
+        return null;
+    }
+  }, [
+    activeTab,
+    analytics,
+    customersTabContent,
+    error,
+    filters.dateRange,
+    handleUploadComplete,
+    loading,
+    marketingTabContent,
+    productsTabContent,
+    predictionsTabContent,
+    salesTabContent,
+    segmentsTabContent,
+    uploadSummary,
+  ]);
 
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-gray-50 p-4">
-      <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">
-          🚀 E-Commerce Analytics & Market Trends
+        <div className="max-w-7xl mx-auto space-y-8">
+          <header className="space-y-2">
+            <h1 className="text-3xl font-bold text-gray-900">
+              E-Commerce Intelligence Dashboard
         </h1>
+            <p className="text-sm text-gray-600">
+              Upload data, apply filters, and drill into insights without waiting for heavy charts to load upfront.
+            </p>
+          </header>
         
-        <DataUpload onDataUploaded={handleDataUploaded} />
+          <FilterPanel
+            filters={filters}
+            setFilters={handleFiltersChange}
+            categories={categories}
+          />
         
-        {uploadedData && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-            <FestivalTrends data={uploadedData.trends?.festivalTrends} />
-            <PredictionPanel predictions={uploadedData.predictions || []} />
-          </div>
-        )}
-        
-        <FilterPanel filters={filters} setFilters={setFilters} />
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <SalesChart data={analyticsData?.sales} title={uploadedData ? "📊 Uploaded Data Sales Trends" : "Sales Trends"} />
-          <CustomerBehavior data={analyticsData?.behavior} title={uploadedData ? "👥 Customer Insights from Data" : "Customer Behavior"} />
-        </div>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <ProductHeatmap data={analyticsData?.products} title={uploadedData ? "🔥 Product Performance Analysis" : "Product Heatmap"} />
-          <ConversionFunnel data={analyticsData?.funnel} title={uploadedData ? "🎯 Sales Funnel from Data" : "Conversion Funnel"} />
-        </div>
-        
-        {customerData && (
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">🎯 Customer Behavior Analytics</h2>
-            <CustomerSegments data={customerData} />
-          </div>
-        )}
+          <nav className="flex flex-wrap gap-2">
+            {TAB_ORDER.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => handleTabChange(tab.id)}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                  activeTab === tab.id
+                    ? "bg-blue-600 text-white shadow"
+                    : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-100"
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+
+          {renderTabContent}
       </div>
     </div>
     </ProtectedRoute>
+  );
+}
+
+function SummaryCard({ title, value }) {
+  return (
+    <div className="bg-white rounded-lg shadow p-4">
+      <div className="text-xs uppercase tracking-wide text-gray-500 font-semibold">
+        {title}
+      </div>
+      <div className="text-2xl font-semibold text-gray-900 mt-2">{value}</div>
+    </div>
   );
 }

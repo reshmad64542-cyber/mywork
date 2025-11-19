@@ -1,8 +1,8 @@
 "use client";
 
-export default function FilterPanel({ filters, setFilters }) {
+export default function FilterPanel({ filters, setFilters, categories = [] }) {
   const handleFilterChange = (key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
+    setFilters({ ...filters, [key]: value });
   };
 
   return (
@@ -36,37 +36,19 @@ export default function FilterPanel({ filters, setFilters }) {
             className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="all">All Categories</option>
-            <option value="groceries">Groceries</option>
-            <option value="clothing">Clothing</option>
-            <option value="kitchen">Kitchen</option>
-            <option value="beauty">Beauty</option>
-            <option value="sports">Sports</option>
-            <option value="beverages">Beverages</option>
+            {categories.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
           </select>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Location
-          </label>
-          <select 
-            value={filters.location}
-            onChange={(e) => handleFilterChange('location', e.target.value)}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Locations</option>
-            <option value="mumbai">Mumbai</option>
-            <option value="delhi">Delhi</option>
-            <option value="bangalore">Bangalore</option>
-            <option value="chennai">Chennai</option>
-            <option value="kolkata">Kolkata</option>
-          </select>
-        </div>
       </div>
 
       <div className="mt-4 flex flex-wrap gap-2">
         <button 
-          onClick={() => setFilters({ dateRange: '30d', category: 'all', location: 'all' })}
+          onClick={() => setFilters({ dateRange: '30d', category: 'all' })}
           className="px-4 py-2 text-sm bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-colors"
         >
           Reset Filters

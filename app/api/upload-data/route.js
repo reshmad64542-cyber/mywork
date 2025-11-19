@@ -1,165 +1,187 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from "next/server";
+import { performance } from "node:perf_hooks";
+import * as XLSX from "xlsx";
+import connectDB from "../../lib/db";
+import {
+  getSalesAnalytics,
+  getProductPerformance,
+  getCustomerBehavior,
+  getCustomerSegments,
+  getMarketingAnalytics,
+  getPredictions,
+  invalidateAnalyticsCache,
+} from "../../lib/analytics";
 
-// Redirect to backend API
+export const runtime = "nodejs";
 
-const processCsvData = (csvText) => {
-  const lines = csvText.split('\n');
-  const headers = lines[0].split(',').map(h => h.trim());
-  const data = [];
+const REQUIRED_COLUMNS = ["date", "product", "category", "quantity", "price"];
 
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i].trim()) {
-      const values = lines[i].split(',').map(v => v.trim());
-      const record = {};
-      headers.forEach((header, index) => {
-        record[header] = values[index] || '';
-      });
-      data.push(record);
+function normaliseRow(row) {
+  const output = {};
+  REQUIRED_COLUMNS.forEach((column) => {
+    if (!(column in row)) {
+      throw new Error(`Missing required column "${column}" in uploaded file.`);
     }
+  });
+
+  const rawDate = row.date ?? row.Date ?? row.DATE;
+  if (!rawDate) {
+    throw new Error("Each row must include a date column.");
   }
-  return data;
-};
 
-const processExcelData = (buffer) => {
-  const workbook = XLSX.read(buffer, { type: 'buffer' });
-  const sheetName = workbook.SheetNames[0];
-  const worksheet = workbook.Sheets[sheetName];
-  return XLSX.utils.sheet_to_json(worksheet);
-};
+  const parsedDate = new Date(rawDate);
+  if (Number.isNaN(parsedDate.getTime())) {
+    throw new Error(`Invalid date value "${rawDate}"`);
+  }
 
-const analyzeTrendsFromDB = async (connection) => {
-  // Get festival trends
-  const [festivalRows] = await connection.execute(`
-    SELECT festival, product, SUM(quantity) as productQuantity, SUM(quantity * price) as productRevenue
-    FROM sales_data 
-    WHERE festival IS NOT NULL AND festival != ''
-    GROUP BY festival, product
-  `);
-  
-  const festivalTrends = {};
-  festivalRows.forEach(row => {
-    if (!festivalTrends[row.festival]) {
-      festivalTrends[row.festival] = { products: {}, totalRevenue: 0 };
-    }
-    festivalTrends[row.festival].products[row.product] = {
-      quantity: row.productQuantity,
-      revenue: row.productRevenue
-    };
-  });
-  
-  // Calculate total revenue per festival
-  const [festivalTotals] = await connection.execute(`
-    SELECT festival, SUM(quantity * price) as totalRevenue
-    FROM sales_data 
-    WHERE festival IS NOT NULL AND festival != ''
-    GROUP BY festival
-  `);
-  
-  festivalTotals.forEach(row => {
-    if (festivalTrends[row.festival]) {
-      festivalTrends[row.festival].totalRevenue = row.totalRevenue;
-    }
-  });
-  
-  // Get product trends
-  const [productRows] = await connection.execute(`
-    SELECT product, category, SUM(quantity) as totalQuantity, SUM(quantity * price) as totalRevenue
-    FROM sales_data 
-    GROUP BY product, category
-  `);
-  
-  const productTrends = {};
-  productRows.forEach(row => {
-    productTrends[row.product] = {
-      category: row.category,
-      totalQuantity: row.totalQuantity,
-      totalRevenue: row.totalRevenue
-    };
-  });
-  
-  return { festivalTrends, productTrends };
-};
+  const normalised = {
+    date: parsedDate.toISOString().slice(0, 10),
+    product: String(row.product ?? row.Product ?? "").trim(),
+    category: String(row.category ?? row.Category ?? "").trim(),
+    quantity: Number(row.quantity ?? row.Quantity ?? 0),
+    price: Number(row.price ?? row.Price ?? 0),
+    festival: (row.festival ?? row.Festival ?? "").trim() || null,
+  };
 
-const generatePredictionsFromDB = async (connection, trends) => {
-  const predictions = [];
-  
-  // Clear existing predictions
-  await connection.execute('DELETE FROM predictions');
-  
-  // Generate festival predictions
-  for (const [festival, data] of Object.entries(trends.festivalTrends)) {
-    const topProducts = Object.entries(data.products)
-      .sort((a, b) => b[1].quantity - a[1].quantity)
-      .slice(0, 3);
-
-    const prediction = {
-      type: 'festival',
-      festival,
-      prediction: `${festival}: Top products - ${topProducts.map(([product, data]) => 
-        `${product} (${data.quantity} units)`).join(', ')}`,
-      revenue: data.totalRevenue,
-      confidence: 85
-    };
-    
-    predictions.push(prediction);
-    
-    // Store in database
-    await connection.execute(
-      'INSERT INTO predictions (type, festival, prediction, confidence, revenue) VALUES (?, ?, ?, ?, ?)',
-      [prediction.type, prediction.festival, prediction.prediction, prediction.confidence, prediction.revenue]
+  if (!normalised.product) {
+    throw new Error("Product value cannot be empty.");
+  }
+  if (!normalised.category) {
+    throw new Error("Category value cannot be empty.");
+  }
+  if (Number.isNaN(normalised.quantity) || normalised.quantity < 0) {
+    throw new Error(
+      `Invalid quantity value "${row.quantity ?? row.Quantity}". Quantity must be a non-negative number.`
     );
   }
-  
-  // Store festival trends
-  await connection.execute('DELETE FROM festival_trends');
-  for (const [festival, data] of Object.entries(trends.festivalTrends)) {
-    const totalQuantity = Object.values(data.products).reduce((sum, p) => sum + p.quantity, 0);
-    await connection.execute(
-      'INSERT INTO festival_trends (festival, total_revenue, total_quantity) VALUES (?, ?, ?)',
-      [festival, data.totalRevenue, totalQuantity]
+  if (Number.isNaN(normalised.price) || normalised.price < 0) {
+    throw new Error(
+      `Invalid price value "${row.price ?? row.Price}". Price must be a non-negative number.`
     );
   }
-  
-  return predictions;
-};
+
+  return normalised;
+}
+
+function parseCsv(buffer) {
+  const text = buffer.toString("utf8");
+  const [headerLine, ...lineItems] = text.split(/\r?\n/).filter((line) => line.trim().length > 0);
+  if (!headerLine) {
+    return [];
+  }
+  const headers = headerLine.split(",").map((item) => item.trim());
+  return lineItems.map((line) => {
+    const values = line.split(",").map((value) => value.trim());
+    return headers.reduce((record, header, index) => {
+      record[header] = values[index] ?? "";
+      return record;
+    }, {});
+    });
+}
+
+function parseExcel(buffer) {
+  const workbook = XLSX.read(buffer, { type: "buffer" });
+  const firstSheet = workbook.SheetNames[0];
+  const worksheet = workbook.Sheets[firstSheet];
+  return XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+}
+
+async function insertRows(rows) {
+  if (!rows.length) {
+    return 0;
+  }
+
+  const pool = connectDB();
+  const chunkSize = 1000;
+  const insertPromises = [];
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const chunk = rows.slice(i, i + chunkSize);
+    const placeholders = chunk.map(() => "(?, ?, ?, ?, ?, ?)").join(", ");
+    const flatValues = chunk.flatMap((row) => [
+      row.date,
+      row.product,
+      row.category,
+      row.quantity,
+      row.price,
+      row.festival,
+    ]);
+
+    insertPromises.push(
+      pool.query(
+        `INSERT INTO sales_data (date, product, category, quantity, price, festival)
+         VALUES ${placeholders}`,
+        flatValues
+      )
+    );
+  }
+
+  await Promise.all(insertPromises);
+  return rows.length;
+}
 
 export async function POST(request) {
-  const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001';
+  const startTime = performance.now();
 
   try {
-    // Forward the incoming request body (which may be a multipart/form-data stream)
-    const contentType = request.headers.get('content-type') || '';
+    const formData = await request.formData();
+    const file = formData.get("file");
 
-    // Debug
-    try { console.log('[upload proxy] forwarding upload to', `${backendUrl}/api/upload-data`, 'content-type:', contentType); } catch (e) {}
-
-    // Prefer streaming the request.body directly (works in Node and Edge runtimes).
-    // Fallback to blob() if body isn't a readable stream in this runtime.
-    let forwardBody = null;
-    if (request.body) {
-      forwardBody = request.body;
-    } else {
-      try {
-        const blob = await request.blob();
-        forwardBody = blob;
-      } catch (e) {
-        console.warn('[upload proxy] request.body and blob() both unavailable');
-        return NextResponse.json({ error: 'Unable to read upload body' }, { status: 500 });
-      }
+    if (!file) {
+      return NextResponse.json(
+        { error: "No file uploaded. Please attach a CSV or Excel file." },
+        { status: 400 }
+      );
     }
 
-    const res = await fetch(`${backendUrl}/api/upload-data`, {
-      method: 'POST',
-      headers: {
-        ...(contentType ? { 'content-type': contentType } : {}),
-      },
-      body: forwardBody,
-    });
+    const buffer = Buffer.from(await file.arrayBuffer());
+    let rawRows;
 
-    const data = await res.json().catch(() => ({}));
-    return NextResponse.json(data, { status: res.status });
-  } catch (err) {
-    console.error('Upload proxy error:', err);
-    return NextResponse.json({ error: 'Failed to forward upload to backend' }, { status: 500 });
+    if (file.name.toLowerCase().endsWith(".csv")) {
+      rawRows = parseCsv(buffer);
+    } else if (file.name.toLowerCase().endsWith(".xlsx")) {
+      rawRows = parseExcel(buffer);
+    } else {
+      return NextResponse.json(
+        { error: "Unsupported file type. Please upload a .csv or .xlsx file." },
+        { status: 400 }
+      );
+    }
+
+    const normalisedRows = rawRows.map(normaliseRow);
+    const inserted = await insertRows(normalisedRows);
+
+    const sampleRows = normalisedRows.slice(0, 5);
+    invalidateAnalyticsCache();
+
+    const [sales, products, customerBehavior, customerSegments, marketing, predictions] =
+      await Promise.all([
+        getSalesAnalytics(),
+        getProductPerformance(),
+        getCustomerBehavior(),
+        getCustomerSegments(),
+        getMarketingAnalytics(),
+        getPredictions(),
+      ]);
+
+    return NextResponse.json({
+      message: "Upload successful",
+      total: inserted,
+      durationMs: Math.round(performance.now() - startTime),
+      sample: sampleRows,
+      analytics: {
+        sales,
+        products,
+        customerBehavior,
+        customerSegments,
+        marketing,
+        predictions,
+      },
+    });
+  } catch (error) {
+    console.error("Data upload error:", error);
+    return NextResponse.json(
+      { error: error.message || "Failed to process the uploaded file." },
+      { status: 500 }
+    );
   }
 }
